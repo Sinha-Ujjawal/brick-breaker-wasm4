@@ -4,15 +4,35 @@
 #include <stdbool.h>
 #include <string.h>
 
-#define BAR_WIDTH 32
-#define BAR_HEIGHT 10
-#define BAR_Y 145
-#define MIN_BAR_X 1
-#define MAX_BAR_X (SCREEN_SIZE - MIN_BAR_X - BAR_WIDTH)
-#define BALL_DIAMETER 8
+#define ARRAY_LEN(arr) (sizeof((arr)) / sizeof((arr)[0]))
 
+#define BAR_WIDTH  32
+#define BAR_HEIGHT 8
+#define BAR_Y      145
+#define MIN_BAR_X  1
+#define MAX_BAR_X  (SCREEN_SIZE - MIN_BAR_X - BAR_WIDTH)
+
+#define BALL_DIAMETER      6
 #define BALL_VELOCITY_DOWN 1
 #define BALL_VELOCITY_UP  -1
+
+#define BRICK_INITIAL_X             2
+#define BRICK_INITIAL_Y             2
+#define BRICK_PAD                   1
+#define BRICK_WIDTH_PLUS_PADDING    26
+#define BRICK_HEIGHT_PLUS_PADDING   8
+#define BRICK_WIDTH                 (BRICK_WIDTH_PLUS_PADDING)  - (BRICK_PAD * 2)
+#define BRICK_HEIGHT                (BRICK_HEIGHT_PLUS_PADDING) - (BRICK_PAD * 2)
+#define NUM_BRICK_COLS              ((int) ((SCREEN_SIZE - (BRICK_INITIAL_X * 2)) / BRICK_WIDTH_PLUS_PADDING))
+#define NUM_BRICK_ROWS              8
+#define NUM_BRICKS                  (NUM_BRICK_COLS) * (NUM_BRICK_ROWS)
+
+typedef struct {
+    int x;
+    int y;
+    int width;
+    int height;
+} Rect;
 
 typedef enum {
     BHV_L_L, // -1 -1
@@ -35,6 +55,12 @@ typedef enum {
 } Screen_Kind;
 
 typedef struct {
+    bool is_alive;
+    int brick_x;
+    int brick_y;
+} Brick;
+
+typedef struct {
     Screen_Kind screen_kind;
 
     size_t frame_clock;
@@ -51,6 +77,8 @@ typedef struct {
     // Ball Velocity
     Ball_Horizontal_Velocity ball_velocity_x;
     int ball_velocity_y;
+
+    Brick bricks[NUM_BRICKS];
 } Game_State;
 
 void update_ball_velocity_x_to_left(Game_State *state) {
@@ -143,12 +171,66 @@ bool overlap(int l1, int h1, int l2, int h2) {
     return (l1 <= h2) && (l2 <= h1);
 }
 
+// Checks if Bbox 2 is colliding with Bbox 1 from above
+bool bbox_colliding_top(Rect bb1, Rect bb2) {
+    if (!overlap(bb1.x, bb1.x + bb1.width, bb2.x, bb2.x + bb2.width)) {
+        return false;
+    }
+    if (bb1.y != bb2.y + bb2.height) {
+        return false;
+    }
+    return true;
+}
+
+// Checks if Bbox 2 is colliding with Bbox 1 from below
+bool bbox_colliding_bottom(Rect bb1, Rect bb2) {
+    if (!overlap(bb1.x, bb1.x + bb1.width, bb2.x, bb2.x + bb2.width)) {
+        return false;
+    }
+    if (bb1.y + bb1.height != bb2.y) {
+        return false;
+    }
+    return true;
+}
+
+// Checks if Bbox 2 is colliding with Bbox 1 from left
+bool bbox_colliding_left(Rect bb1, Rect bb2) {
+    if (!overlap(bb1.y, bb1.y + bb1.height, bb2.y, bb2.y + bb2.height)) {
+        return false;
+    }
+    if (bb1.x != bb2.x + bb2.width) {
+        return false;
+    }
+    return true;
+}
+
+// Checks if Bbox 2 is colliding with Bbox 1 from right
+bool bbox_colliding_right(Rect bb1, Rect bb2) {
+    if (!overlap(bb1.y, bb1.y + bb1.height, bb2.y, bb2.y + bb2.height)) {
+        return false;
+    }
+    if (bb1.x + bb1.width != bb2.x) {
+        return false;
+    }
+    return true;
+}
+
 void reset_ball(Game_State *state) {
     state->ball_x = state->bar_x + (BAR_WIDTH >> 1) - (BALL_DIAMETER >> 1);
     state->ball_y = BAR_Y - BALL_DIAMETER;
     state->ball_velocity_x.kind = BHV_N_N;
     state->ball_velocity_x.mode = false;
     state->ball_velocity_y = 0;
+}
+
+void reset_bricks(Game_State *state) {
+    for (int i = 0; i < NUM_BRICKS; i++) {
+        int x = i % NUM_BRICK_COLS;
+        int y = i / NUM_BRICK_COLS;
+        state->bricks[i].is_alive = true;
+        state->bricks[i].brick_x = BRICK_PAD + BRICK_INITIAL_X + x * BRICK_WIDTH_PLUS_PADDING;
+        state->bricks[i].brick_y = BRICK_PAD + BRICK_INITIAL_Y + y * BRICK_HEIGHT_PLUS_PADDING;
+    }
 }
 
 Game_State state = {0};
@@ -172,6 +254,7 @@ void start() {
     state.current_palette = TWO_BIT_DEMICHROME;
     state.bar_x = MIN_BAR_X;
     reset_ball(&state);
+    reset_bricks(&state);
     set_palette(state.current_palette);
 }
 
@@ -285,33 +368,93 @@ void update() {
 
         // Animate and State Update
         {
+            Rect ball_bbox = {
+                .x=state.ball_x,
+                .y=state.ball_y,
+                .width=BALL_DIAMETER,
+                .height=BALL_DIAMETER,
+            };
+            Rect bar_bbox = {
+                .x=state.bar_x,
+                .y=BAR_Y,
+                .width=BAR_WIDTH,
+                .height=BAR_HEIGHT,
+            };
             if (state.ball_y <= 0 && state.ball_velocity_y != 0) {
                 // Upper Wall
                 state.ball_velocity_y = BALL_VELOCITY_DOWN;
             } else if (state.ball_y + BALL_DIAMETER >= SCREEN_SIZE - 1) {
                 // Lower Wall
                 reset_ball(&state);
-            } else if (overlap(
-                           state.ball_x, state.ball_x + BALL_DIAMETER,
-                           state.bar_x  , state.bar_x + BAR_WIDTH) &&
-                       state.ball_y + BALL_DIAMETER == BAR_Y &&
-                       state.ball_velocity_y != 0) {
-                // Colliding with bar
-                state.ball_velocity_y = BALL_VELOCITY_UP;
-                if (gamepad & BUTTON_LEFT) {
-                    update_ball_velocity_x_to_left(&state);
-                }
-                if (gamepad & BUTTON_RIGHT) {
-                    update_ball_velocity_x_to_right(&state);
-                }
             }
-
             if (state.ball_x <= 0) {
                 // Left Wall
                 reflect_velocity_x_to_right(&state);
             } else if (state.ball_x + BALL_DIAMETER >= SCREEN_SIZE) {
                 // Right Wall
                 reflect_velocity_x_to_left(&state);
+            }
+
+            if (state.ball_velocity_y != 0) {
+                bool colliding = false;
+
+                if (bbox_colliding_top(ball_bbox, bar_bbox)) {
+                    state.ball_velocity_y = BALL_VELOCITY_DOWN;
+                    colliding = true;
+                } else if (bbox_colliding_bottom(ball_bbox, bar_bbox)) {
+                    state.ball_velocity_y = BALL_VELOCITY_UP;
+                    colliding = true;
+                } else if (bbox_colliding_left(ball_bbox, bar_bbox)) {
+                    reflect_velocity_x_to_right(&state);
+                    colliding = true;
+                } else if (bbox_colliding_right(ball_bbox, bar_bbox)) {
+                    reflect_velocity_x_to_left(&state);
+                    colliding = true;
+                }
+
+                if (colliding) {
+                    if (gamepad & BUTTON_LEFT) {
+                        update_ball_velocity_x_to_left(&state);
+                    }
+                    if (gamepad & BUTTON_RIGHT) {
+                        update_ball_velocity_x_to_right(&state);
+                    }
+                }
+            }
+
+            for (int i = 0; i < NUM_BRICKS; i++) {
+                if (!state.bricks[i].is_alive) continue;
+                Rect brick_bbox = {
+                    .x=state.bricks[i].brick_x,
+                    .y=state.bricks[i].brick_y,
+                    .width=BRICK_WIDTH,
+                    .height=BRICK_HEIGHT,
+                };
+                bool colliding = false;
+                if (bbox_colliding_top(ball_bbox, brick_bbox)) {
+                    state.ball_velocity_y = BALL_VELOCITY_DOWN;
+                    colliding = true;
+                } else if (bbox_colliding_bottom(ball_bbox, brick_bbox)) {
+                    state.ball_velocity_y = BALL_VELOCITY_UP;
+                    colliding = true;
+                } else if (bbox_colliding_left(ball_bbox, brick_bbox)) {
+                    reflect_velocity_x_to_right(&state);
+                    colliding = true;
+                } else if (bbox_colliding_right(ball_bbox, brick_bbox)) {
+                    reflect_velocity_x_to_left(&state);
+                    colliding = true;
+                }
+                if (colliding) {
+                    state.bricks[i].is_alive = false;
+                    // 262 Hz - 523 Hz
+                    // 30 frames i.e; 0.5 sec
+                    // 100% volume
+                    // TONE_PULSE1
+                    // tone (262, 30, 100, TONE_PULSE1);
+                    // tone(262, 60, 100, TONE_PULSE1 | TONE_MODE3);
+                    tone(262 | (523 << 16), 5, 25, TONE_PULSE1 | TONE_MODE1);
+                    break;
+                }
             }
 
             state.ball_y = state.ball_y + state.ball_velocity_y;
@@ -352,13 +495,22 @@ void update() {
 
             *DRAW_COLORS = 0x41;
             rect(state.bar_x, BAR_Y, BAR_WIDTH, BAR_HEIGHT);
+
+            *DRAW_COLORS = 0x03;
+            for (size_t i = 0; i < NUM_BRICKS; i++) {
+                if (state.bricks[i].is_alive) {
+                    rect(state.bricks[i].brick_x,
+                         state.bricks[i].brick_y,
+                         BRICK_WIDTH,
+                         BRICK_HEIGHT);
+                }
+            }
         }
         break;
     }
     default:
         trace("Unreachable!");
     }
-
 
     state.frame_clock = (state.frame_clock + 1) % 60;
     state.previous_gamepad = gamepad;
