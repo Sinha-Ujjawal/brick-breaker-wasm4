@@ -1,5 +1,8 @@
 #include "wasm4.h"
 
+#ifndef PALETTES_H_
+#define PALETTES_H_
+
 typedef enum {
     ICE_CREAM_GB,
     LAVA_GB,
@@ -59,3 +62,5 @@ void set_palette(Palette_Picker palette) {
       break;
     }
 }
+
+#endif

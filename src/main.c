@@ -1,4 +1,5 @@
 #include "palettes.h"
+#include "utils.h"
 #include "wasm4.h"
 
 #include <stdbool.h>
@@ -17,7 +18,7 @@
 #define BALL_VELOCITY_UP  -1
 
 #define BRICK_INITIAL_X             2
-#define BRICK_INITIAL_Y             2
+#define BRICK_INITIAL_Y             BALL_DIAMETER + 2
 #define BRICK_PAD                   1
 #define BRICK_WIDTH_PLUS_PADDING    26
 #define BRICK_HEIGHT_PLUS_PADDING   8
@@ -26,6 +27,8 @@
 #define NUM_BRICK_COLS              ((int) ((SCREEN_SIZE - (BRICK_INITIAL_X * 2)) / BRICK_WIDTH_PLUS_PADDING))
 #define NUM_BRICK_ROWS              8
 #define NUM_BRICKS                  (NUM_BRICK_COLS) * (NUM_BRICK_ROWS)
+
+static char temp_buffer[1024];
 
 typedef struct {
     int x;
@@ -51,6 +54,7 @@ typedef struct {
 typedef enum {
     HELP_SCREEN,
     GAME_SCREEN,
+    GAME_OVER_SCREEN,
     NUM_SCREEN
 } Screen_Kind;
 
@@ -66,6 +70,9 @@ typedef struct {
     size_t frame_clock;
     uint8_t previous_gamepad;
     Palette_Picker current_palette;
+
+    // Lives
+    uint8_t num_balls_left;
 
     // Bar Position
     int bar_x;
@@ -157,20 +164,6 @@ void reflect_velocity_x_to_right(Game_State *state) {
     }
 }
 
-int clamp_int(int x, int min_x, int max_x) {
-    if (x < min_x) {
-        return min_x;
-    }
-    if (x > max_x) {
-        return max_x;
-    }
-    return x;
-}
-
-bool overlap(int l1, int h1, int l2, int h2) {
-    return (l1 <= h2) && (l2 <= h1);
-}
-
 // Checks if Bbox 2 is colliding with Bbox 1 from above
 bool bbox_colliding_top(Rect bb1, Rect bb2) {
     if (!overlap(bb1.x, bb1.x + bb1.width, bb2.x, bb2.x + bb2.width)) {
@@ -215,6 +208,27 @@ bool bbox_colliding_right(Rect bb1, Rect bb2) {
     return true;
 }
 
+int count_alive_bricks(const Game_State *state) {
+    int count = 0;
+    for (int i = 0; i < NUM_BRICKS; i++) {
+        if (state->bricks[i].is_alive) {
+            count++;
+        }
+    }
+    return count;
+}
+
+bool any_brick_alive(const Game_State *state) {
+    bool any_brick_alive = false;
+    for (int i = 0; i < NUM_BRICKS; i++) {
+        if (state->bricks[i].is_alive) {
+            any_brick_alive = true;
+            break;
+        }
+    }
+    return any_brick_alive;
+}
+
 void reset_ball(Game_State *state) {
     state->ball_x = state->bar_x + (BAR_WIDTH >> 1) - (BALL_DIAMETER >> 1);
     state->ball_y = BAR_Y - BALL_DIAMETER;
@@ -233,6 +247,13 @@ void reset_bricks(Game_State *state) {
     }
 }
 
+void reset_game(Game_State *state) {
+    state->num_balls_left = 3;
+    state->bar_x = MIN_BAR_X;
+    reset_ball(state);
+    reset_bricks(state);
+}
+
 Game_State state = {0};
 
 // Clears the background with a particular
@@ -248,13 +269,12 @@ void clear_background() {
 }
 
 void start() {
-    // state.screen_kind = HELP_SCREEN;
-    state.screen_kind = GAME_SCREEN;
+    state.screen_kind = HELP_SCREEN;
+    // state.screen_kind = GAME_SCREEN;
+    // state.screen_kind = GAME_OVER_SCREEN;
     state.frame_clock = 0;
     state.current_palette = TWO_BIT_DEMICHROME;
-    state.bar_x = MIN_BAR_X;
-    reset_ball(&state);
-    reset_bricks(&state);
+    reset_game(&state);
     set_palette(state.current_palette);
 }
 
@@ -282,10 +302,19 @@ void update() {
     clear_background();
 
     // Switch Screen Logic
-    if (pressed_this_frame & BUTTON_DOWN) {
-        state.screen_kind = GAME_SCREEN;
-    } else if (pressed_this_frame & BUTTON_UP) {
+    if (pressed_this_frame & BUTTON_UP) {
         state.screen_kind = HELP_SCREEN;
+    }
+    if (state.screen_kind == GAME_OVER_SCREEN) {
+        if (pressed_this_frame & BUTTON_DOWN) {
+            reset_game(&state);
+            state.screen_kind = GAME_SCREEN;
+            return;
+        }
+    } else {
+        if (pressed_this_frame & BUTTON_DOWN) {
+            state.screen_kind = GAME_SCREEN;
+        }
     }
 
     switch (state.screen_kind) {
@@ -302,11 +331,11 @@ void update() {
             text("Brick Breaker!", text_x, text_y);
         }
 
-        text_y += text_ypad << 2;
+        text_y += FONT_SIZE + text_ypad;
+        text_y += FONT_SIZE + text_ypad;
 
         {
             *DRAW_COLORS = 0x03;
-            text_y += FONT_SIZE + text_ypad;
             text("Click on x", text_x, text_y);
 
             text_y += FONT_SIZE + text_ypad;
@@ -316,22 +345,22 @@ void update() {
             text("palette.", text_x, text_y);
         }
 
-        text_y += text_ypad << 2;
+        text_y += FONT_SIZE + text_ypad;
+        text_y += FONT_SIZE + text_ypad;
 
         {
             *DRAW_COLORS = 0x01;
-            text_y += FONT_SIZE + text_ypad;
-            text("Press down arrow", text_x, text_y);
+            text("Press down arrow to", text_x, text_y);
 
             text_y += FONT_SIZE + text_ypad;
-            text("to start the game!", text_x, text_y);
+            text("start the game!", text_x, text_y);
         }
 
-        text_y += text_ypad << 2;
+        text_y += FONT_SIZE + text_ypad;
+        text_y += FONT_SIZE + text_ypad;
 
         {
             *DRAW_COLORS = 0x03;
-            text_y += FONT_SIZE + text_ypad;
             text("Press up arrow", text_x, text_y);
 
             text_y += FONT_SIZE + text_ypad;
@@ -344,6 +373,11 @@ void update() {
         break;
     }
     case GAME_SCREEN: {
+        if (!any_brick_alive(&state)) {
+            state.screen_kind = GAME_OVER_SCREEN;
+            return;
+        }
+
         // Button Actions
         {
             // Bar Movements
@@ -385,7 +419,13 @@ void update() {
                 state.ball_velocity_y = BALL_VELOCITY_DOWN;
             } else if (state.ball_y + BALL_DIAMETER >= SCREEN_SIZE - 1) {
                 // Lower Wall
-                reset_ball(&state);
+                if (state.num_balls_left > 0) {
+                    reset_ball(&state);
+                    state.num_balls_left--;
+                } else {
+                    state.screen_kind = GAME_OVER_SCREEN;
+                    return;
+                }
             }
             if (state.ball_x <= 0) {
                 // Left Wall
@@ -491,6 +531,9 @@ void update() {
         // Draw
         {
             *DRAW_COLORS = 0x43;
+            for (uint8_t i = 0; i < state.num_balls_left; i++) {
+                rect(1 + i * (BALL_DIAMETER + 1), 1, BALL_DIAMETER, BALL_DIAMETER);
+            }
             rect(state.ball_x, state.ball_y, BALL_DIAMETER, BALL_DIAMETER);
 
             *DRAW_COLORS = 0x41;
@@ -508,6 +551,51 @@ void update() {
         }
         break;
     }
+    case GAME_OVER_SCREEN: {
+        int text_x = 5;
+        int text_y = 5;
+        int text_ypad = 3;
+
+        {
+            *DRAW_COLORS = 0x04;
+            int count = count_alive_bricks(&state);
+            if (count > 0) {
+                text("Game Over :(", text_x, text_y);
+
+                text_y += FONT_SIZE + text_ypad;
+                text("You have destroyed", text_x, text_y);
+
+                itoa(NUM_BRICKS - count, temp_buffer, 10);
+                text_y += FONT_SIZE + text_ypad;
+                text(temp_buffer, text_x, text_y);
+                text("bricks",
+                     text_x + (FONT_SIZE * (1 + (int) strlen(temp_buffer))),
+                     text_y);
+            } else {
+                text("Congratulations!", text_x, text_y);
+
+                text_y += FONT_SIZE + text_ypad;
+                text("You have destroyed", text_x, text_y);
+
+                text_y += FONT_SIZE + text_ypad;
+                text("All the bricks!", text_x, text_y);
+            }
+        }
+
+        text_y += FONT_SIZE + text_ypad;
+        text_y += FONT_SIZE + text_ypad;
+
+        {
+            *DRAW_COLORS = 0x01;
+            text("Press down arrow to", text_x, text_y);
+
+            text_y += FONT_SIZE + text_ypad;
+            text("restart the game!", text_x, text_y);
+        }
+
+        break;
+    }
+    case NUM_SCREEN:
     default:
         trace("Unreachable!");
     }
