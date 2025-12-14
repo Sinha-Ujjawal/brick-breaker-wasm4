@@ -5,8 +5,6 @@
 #include <stdbool.h>
 #include <string.h>
 
-#define ARRAY_LEN(arr) (sizeof((arr)) / sizeof((arr)[0]))
-
 #define BAR_WIDTH  32
 #define BAR_HEIGHT 8
 #define BAR_Y      145
@@ -75,6 +73,14 @@ typedef enum {
     LEVEL8,
     NUM_LEVELS
 } Level;
+
+typedef enum {
+    RIGHT,
+    LEFT,
+    BOTTOM,
+    TOP,
+    NUM_DIRECTIONS
+} Direction;
 
 typedef struct {
     Screen_Kind screen_kind;
@@ -179,47 +185,66 @@ void reflect_velocity_x_to_right(Game_State *state) {
     }
 }
 
-// Checks if Bbox 2 is colliding with Bbox 1 from above
-bool bbox_colliding_top(Rect bb1, Rect bb2) {
-    if (!overlap(bb1.x, bb1.x + bb1.width, bb2.x, bb2.x + bb2.width)) {
-        return false;
+void update_ball_velocity_based_on_direction(Game_State *state, Direction dir) {
+    switch(dir) {
+    case TOP:
+        state->ball_velocity_y = BALL_VELOCITY_DOWN;
+        break;
+    case BOTTOM:
+        state->ball_velocity_y = BALL_VELOCITY_UP;
+        break;
+    case LEFT:
+        reflect_velocity_x_to_right(state);
+        break;
+    case RIGHT:
+        reflect_velocity_x_to_left(state);
+        break;
+    case NUM_DIRECTIONS:
+    default:
+        panicf("Unreachable! Invalid Direction: %d", dir);
+        break;
     }
-    if (bb1.y != bb2.y + bb2.height) {
-        return false;
-    }
-    return true;
 }
 
-// Checks if Bbox 2 is colliding with Bbox 1 from below
-bool bbox_colliding_bottom(Rect bb1, Rect bb2) {
-    if (!overlap(bb1.x, bb1.x + bb1.width, bb2.x, bb2.x + bb2.width)) {
+// Checks if Other bbox is colliding with Focus bbox
+// From Top, Bottom, Left or Right
+// Top    -> Other object is above the focus
+// Bottom -> Other object is below the focus
+// Left   -> Other object is left of the focus
+// Right  -> Other object is right of the focus
+bool bbox_colliding(Rect focus, Rect other, Direction *direction) {
+    if (
+        (!overlap(focus.x, focus.x + focus.width,
+                  other.x, other.x + other.width)) ||
+        (!overlap(focus.y, focus.y + focus.height,
+                  other.y, other.y + other.height))
+    ) {
         return false;
     }
-    if (bb1.y + bb1.height != bb2.y) {
-        return false;
-    }
-    return true;
-}
 
-// Checks if Bbox 2 is colliding with Bbox 1 from left
-bool bbox_colliding_left(Rect bb1, Rect bb2) {
-    if (!overlap(bb1.y, bb1.y + bb1.height, bb2.y, bb2.y + bb2.height)) {
-        return false;
-    }
-    if (bb1.x != bb2.x + bb2.width) {
-        return false;
-    }
-    return true;
-}
+    if (direction) {
+        int overlap_right  = (focus.x + focus.width)  - other.x;
+        int overlap_left   = (other.x + other.width)  - focus.x;
+        int overlap_bottom = (focus.y + focus.height) - other.y;
+        int overlap_top    = (other.y + other.height) - focus.y;
 
-// Checks if Bbox 2 is colliding with Bbox 1 from right
-bool bbox_colliding_right(Rect bb1, Rect bb2) {
-    if (!overlap(bb1.y, bb1.y + bb1.height, bb2.y, bb2.y + bb2.height)) {
-        return false;
+        int min_overlap = overlap_left;
+
+        if (overlap_right < min_overlap)  min_overlap = overlap_right;
+        if (overlap_top < min_overlap)    min_overlap = overlap_top;
+        if (overlap_bottom < min_overlap) min_overlap = overlap_bottom;
+
+        if (min_overlap == overlap_top) {
+            *direction = TOP;
+        } else if (min_overlap == overlap_bottom) {
+            *direction = BOTTOM;
+        } else if (min_overlap == overlap_left) {
+            *direction = LEFT;
+        } else {
+            *direction = RIGHT;
+        }
     }
-    if (bb1.x + bb1.width != bb2.x) {
-        return false;
-    }
+
     return true;
 }
 
@@ -485,21 +510,11 @@ void update() {
 
             if (state.ball_velocity_y != 0) {
                 bool colliding = false;
-
-                if (bbox_colliding_top(ball_bbox, bar_bbox)) {
-                    state.ball_velocity_y = BALL_VELOCITY_DOWN;
-                    colliding = true;
-                } else if (bbox_colliding_bottom(ball_bbox, bar_bbox)) {
-                    state.ball_velocity_y = BALL_VELOCITY_UP;
-                    colliding = true;
-                } else if (bbox_colliding_left(ball_bbox, bar_bbox)) {
-                    reflect_velocity_x_to_right(&state);
-                    colliding = true;
-                } else if (bbox_colliding_right(ball_bbox, bar_bbox)) {
-                    reflect_velocity_x_to_left(&state);
+                Direction dir;
+                if (bbox_colliding(ball_bbox, bar_bbox, &dir)) {
+                    update_ball_velocity_based_on_direction(&state, dir);
                     colliding = true;
                 }
-
                 if (colliding) {
                     if (gamepad & BUTTON_LEFT) {
                         update_ball_velocity_x_to_left(&state);
@@ -519,20 +534,9 @@ void update() {
                     .height=BRICK_HEIGHT,
                 };
                 bool colliding = false;
-                if (bbox_colliding_top(ball_bbox, brick_bbox)) {
-                    state.ball_velocity_y = BALL_VELOCITY_DOWN;
-                    colliding = true;
-                }
-                if (bbox_colliding_bottom(ball_bbox, brick_bbox)) {
-                    state.ball_velocity_y = BALL_VELOCITY_UP;
-                    colliding = true;
-                }
-                if (bbox_colliding_left(ball_bbox, brick_bbox)) {
-                    reflect_velocity_x_to_right(&state);
-                    colliding = true;
-                }
-                if (bbox_colliding_right(ball_bbox, brick_bbox)) {
-                    reflect_velocity_x_to_left(&state);
+                Direction dir;
+                if (bbox_colliding(ball_bbox, brick_bbox, &dir)) {
+                    update_ball_velocity_based_on_direction(&state, dir);
                     colliding = true;
                 }
                 if (colliding) {

@@ -4,12 +4,13 @@
 #ifndef UTILS_H_
 #define UTILS_H_
 
+#define ARRAY_LEN(arr) (sizeof((arr)) / sizeof((arr)[0]))
+
 #define panicf(msg_fmt, ...) do {                              \
     tracef("PANIC: Fatal Error At %s:%d", __FILE__, __LINE__); \
     tracef(msg_fmt, ##__VA_ARGS__);                            \
     __builtin_unreachable();                                   \
 } while(0)
-
 
 #define panic(msg) panicf("%s", msg)
 
@@ -35,7 +36,6 @@ int clamp_int(int x, int min_x, int max_x) {
 bool overlap(int l1, int h1, int l2, int h2) {
     return (l1 <= h2) && (l2 <= h1);
 }
-
 
 // A lightweight custom function to reverse a string
 void reverse(char* str, int length) {
