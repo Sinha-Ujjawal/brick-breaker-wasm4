@@ -5,11 +5,11 @@
 #include <stdbool.h>
 #include <string.h>
 
-#define BAR_WIDTH  32
-#define BAR_HEIGHT 8
-#define BAR_Y      145
-#define MIN_BAR_X  1
-#define MAX_BAR_X  (SCREEN_SIZE - MIN_BAR_X - BAR_WIDTH)
+#define PADDLE_WIDTH  32
+#define PADDLE_HEIGHT 8
+#define PADDLE_Y      145
+#define MIN_PADDLE_X  1
+#define MAX_PADDLE_X  (SCREEN_SIZE - MIN_PADDLE_X - PADDLE_WIDTH)
 
 #define BALL_DIAMETER      4
 #define BALL_VELOCITY_DOWN 1
@@ -95,8 +95,8 @@ typedef struct {
     // Lives
     uint8_t num_balls_left;
 
-    // Bar Position
-    int bar_x;
+    // Paddle Position
+    int paddle_x;
 
     // Ball Position
     int ball_x;
@@ -270,8 +270,8 @@ bool any_brick_alive(const Game_State *state) {
 }
 
 void reset_ball(Game_State *state) {
-    state->ball_x = state->bar_x + (BAR_WIDTH >> 1) - (BALL_DIAMETER >> 1);
-    state->ball_y = BAR_Y - BALL_DIAMETER;
+    state->ball_x = state->paddle_x + (PADDLE_WIDTH >> 1) - (BALL_DIAMETER >> 1);
+    state->ball_y = PADDLE_Y - BALL_DIAMETER;
     state->ball_velocity_x.kind = BHV_N_N;
     state->ball_velocity_x.mode = false;
     state->ball_velocity_y = 0;
@@ -311,14 +311,16 @@ void reset_bricks(Game_State *state) {
             panicf("Unreachable! Invalid level: %d", state->level);
             break;
         }
-        state->bricks[i].brick_x = BRICK_PAD + BRICK_INITIAL_X + x * BRICK_WIDTH_PLUS_PADDING;
-        state->bricks[i].brick_y = BRICK_PAD + BRICK_INITIAL_Y + y * BRICK_HEIGHT_PLUS_PADDING;
+        state->bricks[i].brick_x = (
+            BRICK_PAD + BRICK_INITIAL_X + x * BRICK_WIDTH_PLUS_PADDING);
+        state->bricks[i].brick_y = (
+            BRICK_PAD + BRICK_INITIAL_Y + y * BRICK_HEIGHT_PLUS_PADDING);
     }
 }
 
 void reset_level(Game_State *state) {
     state->num_balls_left = 3;
-    state->bar_x = MIN_BAR_X;
+    state->paddle_x = MIN_PADDLE_X;
     reset_ball(state);
     reset_bricks(state);
 }
@@ -453,20 +455,22 @@ void update() {
 
         // Button Actions
         {
-            // Bar Movements
+            // Paddle Movements
             if (gamepad & BUTTON_RIGHT) {
-                int next_bar_x = clamp_int(state.bar_x + 1, MIN_BAR_X, MAX_BAR_X);
-                if (state.ball_velocity_y == 0 && next_bar_x != state.bar_x) {
+                int next_paddle_x = clamp_int(state.paddle_x + 1,
+                                              MIN_PADDLE_X, MAX_PADDLE_X);
+                if (state.ball_velocity_y == 0 && next_paddle_x != state.paddle_x) {
                     state.ball_x += 1;
                 }
-                state.bar_x = next_bar_x;
+                state.paddle_x = next_paddle_x;
             }
             if (gamepad & BUTTON_LEFT) {
-                int next_bar_x = clamp_int(state.bar_x - 1, MIN_BAR_X, MAX_BAR_X);
-                if (state.ball_velocity_y == 0 && next_bar_x != state.bar_x) {
+                int next_paddle_x = clamp_int(state.paddle_x - 1,
+                                              MIN_PADDLE_X, MAX_PADDLE_X);
+                if (state.ball_velocity_y == 0 && next_paddle_x != state.paddle_x) {
                     state.ball_x -= 1;
                 }
-                state.bar_x = next_bar_x;
+                state.paddle_x = next_paddle_x;
             }
             if ((pressed_this_frame & BUTTON_2) && state.ball_velocity_y == 0) {
                 state.ball_velocity_y = BALL_VELOCITY_UP;
@@ -481,11 +485,11 @@ void update() {
                 .width=BALL_DIAMETER,
                 .height=BALL_DIAMETER,
             };
-            Rect bar_bbox = {
-                .x=state.bar_x,
-                .y=BAR_Y,
-                .width=BAR_WIDTH,
-                .height=BAR_HEIGHT,
+            Rect paddle_bbox = {
+                .x=state.paddle_x,
+                .y=PADDLE_Y,
+                .width=PADDLE_WIDTH,
+                .height=PADDLE_HEIGHT,
             };
             if (state.ball_y <= 0 && state.ball_velocity_y != 0) {
                 // Upper Wall
@@ -511,15 +515,15 @@ void update() {
             if (state.ball_velocity_y != 0) {
                 bool colliding = false;
                 Direction dir;
-                if (bbox_colliding(ball_bbox, bar_bbox, &dir)) {
+                if (bbox_colliding(ball_bbox, paddle_bbox, &dir)) {
                     update_ball_velocity_based_on_direction(&state, dir);
                     colliding = true;
                 }
                 if (colliding) {
-                    if ((gamepad & BUTTON_LEFT) && state.bar_x > MIN_BAR_X) {
+                    if ((gamepad & BUTTON_LEFT) && state.paddle_x > MIN_PADDLE_X) {
                         update_ball_velocity_x_to_left(&state);
                     }
-                    if ((gamepad & BUTTON_RIGHT) && state.bar_x < MAX_BAR_X) {
+                    if ((gamepad & BUTTON_RIGHT) && state.paddle_x < MAX_PADDLE_X) {
                         update_ball_velocity_x_to_right(&state);
                     }
                 }
@@ -579,7 +583,8 @@ void update() {
                 state.ball_velocity_x.mode = !state.ball_velocity_x.mode;
                 break;
             default:
-                panicf("Invalid state.ball_velocity_x.kind: %d", state.ball_velocity_x.kind);
+                panicf("Invalid state.ball_velocity_x.kind: %d",
+                       state.ball_velocity_x.kind);
             }
         }
 
@@ -592,7 +597,7 @@ void update() {
             rect(state.ball_x, state.ball_y, BALL_DIAMETER, BALL_DIAMETER);
 
             *DRAW_COLORS = 0x41;
-            rect(state.bar_x, BAR_Y, BAR_WIDTH, BAR_HEIGHT);
+            rect(state.paddle_x, PADDLE_Y, PADDLE_WIDTH, PADDLE_HEIGHT);
 
             for (int i = 0; i < NUM_BRICKS; i++) {
                 if (state.bricks[i].health <= 0) {
