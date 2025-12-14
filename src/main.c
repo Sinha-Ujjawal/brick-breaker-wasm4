@@ -516,10 +516,10 @@ void update() {
                     colliding = true;
                 }
                 if (colliding) {
-                    if (gamepad & BUTTON_LEFT) {
+                    if ((gamepad & BUTTON_LEFT) && state.bar_x > MIN_BAR_X) {
                         update_ball_velocity_x_to_left(&state);
                     }
-                    if (gamepad & BUTTON_RIGHT) {
+                    if ((gamepad & BUTTON_RIGHT) && state.bar_x < MAX_BAR_X) {
                         update_ball_velocity_x_to_right(&state);
                     }
                 }
