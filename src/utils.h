@@ -1,7 +1,17 @@
+#include "wasm4.h"
 #include <stdbool.h>
 
 #ifndef UTILS_H_
 #define UTILS_H_
+
+#define panicf(msg_fmt, ...) do {                              \
+    tracef("PANIC: Fatal Error At %s:%d", __FILE__, __LINE__); \
+    tracef(msg_fmt, ##__VA_ARGS__);                            \
+    __builtin_unreachable();                                   \
+} while(0)
+
+
+#define panic(msg) panicf("%s", msg)
 
 // Clamps a give integer between min_x and max_x
 int clamp_int(int x, int min_x, int max_x) {

@@ -524,7 +524,7 @@ void update() {
                 state.ball_velocity_x.mode = !state.ball_velocity_x.mode;
                 break;
             default:
-                tracef("ERROR: Invalid state.ball_velocity_x.kind: %d", state.ball_velocity_x.kind);
+                panicf("Invalid state.ball_velocity_x.kind: %d", state.ball_velocity_x.kind);
             }
         }
 
@@ -597,7 +597,7 @@ void update() {
     }
     case NUM_SCREEN:
     default:
-        trace("Unreachable!");
+        panic("Unreachable!");
     }
 
     state.frame_clock = (state.frame_clock + 1) % 60;
