@@ -60,6 +60,7 @@ typedef struct {
     uint8_t health;
     int brick_x;
     int brick_y;
+    Clock brick_fall_clock;
 } Brick;
 
 typedef enum {
@@ -85,7 +86,7 @@ typedef enum {
 typedef struct {
     Screen_Kind screen_kind;
 
-    uint8_t frame_clock;
+    Clock frame_clock;
     uint8_t previous_gamepad;
     Palette_Picker current_palette;
 
@@ -188,10 +189,14 @@ void reflect_velocity_x_to_right(Game_State *state) {
 void update_ball_velocity_based_on_direction(Game_State *state, Direction dir) {
     switch(dir) {
     case TOP:
-        state->ball_velocity_y = BALL_VELOCITY_DOWN;
+        if (state->ball_velocity_y != 0) {
+            state->ball_velocity_y = BALL_VELOCITY_DOWN;
+        }
         break;
     case BOTTOM:
-        state->ball_velocity_y = BALL_VELOCITY_UP;
+        if (state->ball_velocity_y != 0) {
+            state->ball_velocity_y = BALL_VELOCITY_UP;
+        }
         break;
     case LEFT:
         reflect_velocity_x_to_right(state);
@@ -269,6 +274,18 @@ bool any_brick_alive(const Game_State *state) {
     return any_brick_alive;
 }
 
+bool any_brick_crossed_or_touched_paddle(const Game_State *state) {
+    bool flg = false;
+    for (int i = 0; i < NUM_BRICKS; i++) {
+        if ((state->bricks[i].health > 0) &&
+            (state->bricks[i].brick_y + BRICK_HEIGHT >= PADDLE_Y)) {
+            flg = true;
+            break;
+        }
+    }
+    return flg;
+}
+
 void reset_ball(Game_State *state) {
     state->ball_x = state->paddle_x + (PADDLE_WIDTH >> 1) - (BALL_DIAMETER >> 1);
     state->ball_y = PADDLE_Y - BALL_DIAMETER;
@@ -281,30 +298,40 @@ void reset_bricks(Game_State *state) {
     for (int i = 0; i < NUM_BRICKS; i++) {
         int x = i % NUM_BRICK_COLS;
         int y = i / NUM_BRICK_COLS;
+        state->bricks[i].brick_fall_clock.clock = 0;
+        state->bricks[i].brick_fall_clock.cycled = false;
         switch(state->level) {
         case LEVEL1:
             state->bricks[i].health = 1;
+            state->bricks[i].brick_fall_clock.clock_size = 0;
             break;
         case LEVEL2:
             state->bricks[i].health = 2;
+            state->bricks[i].brick_fall_clock.clock_size = 0;
             break;
         case LEVEL3:
             state->bricks[i].health = 3;
+            state->bricks[i].brick_fall_clock.clock_size = 240;
             break;
         case LEVEL4:
             state->bricks[i].health = 4;
+            state->bricks[i].brick_fall_clock.clock_size = 240;
             break;
         case LEVEL5:
             state->bricks[i].health = 5;
+            state->bricks[i].brick_fall_clock.clock_size = 300;
             break;
         case LEVEL6:
             state->bricks[i].health = 6;
+            state->bricks[i].brick_fall_clock.clock_size = 300;
             break;
         case LEVEL7:
             state->bricks[i].health = 7;
+            state->bricks[i].brick_fall_clock.clock_size = 360;
             break;
         case LEVEL8:
             state->bricks[i].health = 8;
+            state->bricks[i].brick_fall_clock.clock_size = 360;
             break;
         case NUM_LEVELS:
         default:
@@ -343,7 +370,8 @@ void start() {
     state.screen_kind = HELP_SCREEN;
     // state.screen_kind = GAME_SCREEN;
     // state.screen_kind = GAME_OVER_SCREEN;
-    state.frame_clock = 0;
+    state.frame_clock.clock = 0;
+    state.frame_clock.clock_size = 60;
     state.current_palette = FROGGYOS;
     state.level = LEVEL1;
     reset_level(&state);
@@ -449,6 +477,10 @@ void update() {
     }
     case GAME_SCREEN: {
         if (!any_brick_alive(&state)) {
+            state.screen_kind = GAME_OVER_SCREEN;
+            return;
+        }
+        if (any_brick_crossed_or_touched_paddle(&state)) {
             state.screen_kind = GAME_OVER_SCREEN;
             return;
         }
@@ -586,6 +618,17 @@ void update() {
                 panicf("Invalid state.ball_velocity_x.kind: %d",
                        state.ball_velocity_x.kind);
             }
+
+            for (int i = 0; i < NUM_BRICKS; i++) {
+                if (state.bricks[i].health <= 0) {
+                    continue;
+                }
+                if (state.bricks[i].brick_fall_clock.clock == 0 &&
+                    state.bricks[i].brick_fall_clock.cycled) {
+                    state.bricks[i].brick_y++;
+                }
+                clock_tick(&state.bricks[i].brick_fall_clock);
+            }
         }
 
         // Draw
@@ -690,6 +733,6 @@ void update() {
         panic("Unreachable!");
     }
 
-    state.frame_clock = (state.frame_clock + 1) % 60;
+    clock_tick(&state.frame_clock);
     state.previous_gamepad = gamepad;
 }

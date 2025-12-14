@@ -6,6 +6,27 @@
 
 #define ARRAY_LEN(arr) (sizeof((arr)) / sizeof((arr)[0]))
 
+typedef struct {
+    uint16_t clock;
+    uint16_t clock_size;
+    bool cycled;
+} Clock;
+
+void clock_reset(Clock *clock) {
+    clock->clock = 0;
+    clock->cycled = false;
+}
+
+void clock_tick(Clock *clock) {
+    if (clock->clock_size == 0) {
+        return;
+    }
+    clock->clock = (clock->clock + 1) % clock->clock_size;
+    if (clock->clock == 0) {
+        clock->cycled = true;
+    }
+}
+
 #define panicf(msg_fmt, ...) do {                              \
     tracef("PANIC: Fatal Error At %s:%d", __FILE__, __LINE__); \
     tracef(msg_fmt, ##__VA_ARGS__);                            \
