@@ -13,7 +13,7 @@
 #define MIN_BAR_X  1
 #define MAX_BAR_X  (SCREEN_SIZE - MIN_BAR_X - BAR_WIDTH)
 
-#define BALL_DIAMETER      6
+#define BALL_DIAMETER      4
 #define BALL_VELOCITY_DOWN 1
 #define BALL_VELOCITY_UP  -1
 
@@ -28,7 +28,7 @@
 #define NUM_BRICK_ROWS              8
 #define NUM_BRICKS                  (NUM_BRICK_COLS) * (NUM_BRICK_ROWS)
 
-static char temp_buffer[1024];
+static char temp_buffer[32];
 
 typedef struct {
     int x;
@@ -59,7 +59,7 @@ typedef enum {
 } Screen_Kind;
 
 typedef struct {
-    bool is_alive;
+    uint8_t health;
     int brick_x;
     int brick_y;
 } Brick;
@@ -211,7 +211,7 @@ bool bbox_colliding_right(Rect bb1, Rect bb2) {
 int count_alive_bricks(const Game_State *state) {
     int count = 0;
     for (int i = 0; i < NUM_BRICKS; i++) {
-        if (state->bricks[i].is_alive) {
+        if (state->bricks[i].health > 0) {
             count++;
         }
     }
@@ -221,7 +221,7 @@ int count_alive_bricks(const Game_State *state) {
 bool any_brick_alive(const Game_State *state) {
     bool any_brick_alive = false;
     for (int i = 0; i < NUM_BRICKS; i++) {
-        if (state->bricks[i].is_alive) {
+        if (state->bricks[i].health > 0) {
             any_brick_alive = true;
             break;
         }
@@ -241,7 +241,7 @@ void reset_bricks(Game_State *state) {
     for (int i = 0; i < NUM_BRICKS; i++) {
         int x = i % NUM_BRICK_COLS;
         int y = i / NUM_BRICK_COLS;
-        state->bricks[i].is_alive = true;
+        state->bricks[i].health = 1;
         state->bricks[i].brick_x = BRICK_PAD + BRICK_INITIAL_X + x * BRICK_WIDTH_PLUS_PADDING;
         state->bricks[i].brick_y = BRICK_PAD + BRICK_INITIAL_Y + y * BRICK_HEIGHT_PLUS_PADDING;
     }
@@ -269,8 +269,8 @@ void clear_background() {
 }
 
 void start() {
-    state.screen_kind = HELP_SCREEN;
-    // state.screen_kind = GAME_SCREEN;
+    // state.screen_kind = HELP_SCREEN;
+    state.screen_kind = GAME_SCREEN;
     // state.screen_kind = GAME_OVER_SCREEN;
     state.frame_clock = 0;
     state.current_palette = TWO_BIT_DEMICHROME;
@@ -463,7 +463,7 @@ void update() {
             }
 
             for (int i = 0; i < NUM_BRICKS; i++) {
-                if (!state.bricks[i].is_alive) continue;
+                if (state.bricks[i].health == 0) continue;
                 Rect brick_bbox = {
                     .x=state.bricks[i].brick_x,
                     .y=state.bricks[i].brick_y,
@@ -474,18 +474,21 @@ void update() {
                 if (bbox_colliding_top(ball_bbox, brick_bbox)) {
                     state.ball_velocity_y = BALL_VELOCITY_DOWN;
                     colliding = true;
-                } else if (bbox_colliding_bottom(ball_bbox, brick_bbox)) {
+                }
+                if (bbox_colliding_bottom(ball_bbox, brick_bbox)) {
                     state.ball_velocity_y = BALL_VELOCITY_UP;
                     colliding = true;
-                } else if (bbox_colliding_left(ball_bbox, brick_bbox)) {
+                }
+                if (bbox_colliding_left(ball_bbox, brick_bbox)) {
                     reflect_velocity_x_to_right(&state);
                     colliding = true;
-                } else if (bbox_colliding_right(ball_bbox, brick_bbox)) {
+                }
+                if (bbox_colliding_right(ball_bbox, brick_bbox)) {
                     reflect_velocity_x_to_left(&state);
                     colliding = true;
                 }
                 if (colliding) {
-                    state.bricks[i].is_alive = false;
+                    state.bricks[i].health--;
                     // 262 Hz - 523 Hz
                     // 30 frames i.e; 0.5 sec
                     // 100% volume
@@ -541,7 +544,7 @@ void update() {
 
             *DRAW_COLORS = 0x03;
             for (size_t i = 0; i < NUM_BRICKS; i++) {
-                if (state.bricks[i].is_alive) {
+                if (state.bricks[i].health > 0) {
                     rect(state.bricks[i].brick_x,
                          state.bricks[i].brick_y,
                          BRICK_WIDTH,

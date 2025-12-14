@@ -1,4 +1,5 @@
 #include "wasm4.h"
+#include "utils.h"
 
 #ifndef PALETTES_H_
 #define PALETTES_H_
@@ -8,6 +9,7 @@ typedef enum {
     LAVA_GB,
     TWO_BIT_DEMICHROME,
     ROBOT_ROCK,
+    FROGGYOS,
     NUM_PALETTE_PICKER
 } Palette_Picker;
 
@@ -43,6 +45,14 @@ void palette_robot_rock() {
     PALETTE[3] = 0xffffff; // Color 4
 }
 
+// https://lospec.com/palette-list/froggyos
+void palette_froggyos() {
+    PALETTE[0] = 0xe2d6b5; // Color 1
+    PALETTE[1] = 0x36ad69; // Color 2
+    PALETTE[2] = 0x7b7b7b; // Color 3
+    PALETTE[3] = 0x343434; // Color 4
+}
+
 void set_palette(Palette_Picker palette) {
     switch (palette) {
     case ICE_CREAM_GB:
@@ -57,8 +67,11 @@ void set_palette(Palette_Picker palette) {
     case ROBOT_ROCK:
       palette_robot_rock();
       break;
+    case FROGGYOS:
+      palette_froggyos();
+      break;
     default:
-      tracef("ERROR: Invalid Color Palette: %d!", palette);
+      panicf("ERROR: Invalid Color Palette: %d!", palette);
       break;
     }
 }
