@@ -64,12 +64,27 @@ typedef struct {
     int brick_y;
 } Brick;
 
+typedef enum {
+    LEVEL1,
+    LEVEL2,
+    LEVEL3,
+    LEVEL4,
+    LEVEL5,
+    LEVEL6,
+    LEVEL7,
+    LEVEL8,
+    NUM_LEVELS
+} Level;
+
 typedef struct {
     Screen_Kind screen_kind;
 
-    size_t frame_clock;
+    uint8_t frame_clock;
     uint8_t previous_gamepad;
     Palette_Picker current_palette;
+
+    // Level
+    Level level;
 
     // Lives
     uint8_t num_balls_left;
@@ -241,13 +256,42 @@ void reset_bricks(Game_State *state) {
     for (int i = 0; i < NUM_BRICKS; i++) {
         int x = i % NUM_BRICK_COLS;
         int y = i / NUM_BRICK_COLS;
-        state->bricks[i].health = 1;
+        switch(state->level) {
+        case LEVEL1:
+            state->bricks[i].health = 1;
+            break;
+        case LEVEL2:
+            state->bricks[i].health = 2;
+            break;
+        case LEVEL3:
+            state->bricks[i].health = 3;
+            break;
+        case LEVEL4:
+            state->bricks[i].health = 4;
+            break;
+        case LEVEL5:
+            state->bricks[i].health = 5;
+            break;
+        case LEVEL6:
+            state->bricks[i].health = 6;
+            break;
+        case LEVEL7:
+            state->bricks[i].health = 7;
+            break;
+        case LEVEL8:
+            state->bricks[i].health = 8;
+            break;
+        case NUM_LEVELS:
+        default:
+            panicf("Unreachable! Invalid level: %d", state->level);
+            break;
+        }
         state->bricks[i].brick_x = BRICK_PAD + BRICK_INITIAL_X + x * BRICK_WIDTH_PLUS_PADDING;
         state->bricks[i].brick_y = BRICK_PAD + BRICK_INITIAL_Y + y * BRICK_HEIGHT_PLUS_PADDING;
     }
 }
 
-void reset_game(Game_State *state) {
+void reset_level(Game_State *state) {
     state->num_balls_left = 3;
     state->bar_x = MIN_BAR_X;
     reset_ball(state);
@@ -269,12 +313,13 @@ void clear_background() {
 }
 
 void start() {
-    // state.screen_kind = HELP_SCREEN;
-    state.screen_kind = GAME_SCREEN;
+    state.screen_kind = HELP_SCREEN;
+    // state.screen_kind = GAME_SCREEN;
     // state.screen_kind = GAME_OVER_SCREEN;
     state.frame_clock = 0;
-    state.current_palette = TWO_BIT_DEMICHROME;
-    reset_game(&state);
+    state.current_palette = FROGGYOS;
+    state.level = LEVEL1;
+    reset_level(&state);
     set_palette(state.current_palette);
 }
 
@@ -307,7 +352,10 @@ void update() {
     }
     if (state.screen_kind == GAME_OVER_SCREEN) {
         if (pressed_this_frame & BUTTON_DOWN) {
-            reset_game(&state);
+            if (!any_brick_alive(&state)) {
+                state.level = (state.level + 1) % NUM_LEVELS;
+            }
+            reset_level(&state);
             state.screen_kind = GAME_SCREEN;
             return;
         }
@@ -542,13 +590,20 @@ void update() {
             *DRAW_COLORS = 0x41;
             rect(state.bar_x, BAR_Y, BAR_WIDTH, BAR_HEIGHT);
 
-            *DRAW_COLORS = 0x03;
-            for (size_t i = 0; i < NUM_BRICKS; i++) {
-                if (state.bricks[i].health > 0) {
-                    rect(state.bricks[i].brick_x,
-                         state.bricks[i].brick_y,
-                         BRICK_WIDTH,
-                         BRICK_HEIGHT);
+            for (int i = 0; i < NUM_BRICKS; i++) {
+                if (state.bricks[i].health <= 0) {
+                    continue;
+                }
+                *DRAW_COLORS = 0x03;
+                rect(state.bricks[i].brick_x,
+                     state.bricks[i].brick_y,
+                     BRICK_WIDTH,
+                     BRICK_HEIGHT);
+                *DRAW_COLORS = 0x04;
+                for (int j = 0; j < state.bricks[i].health; j++) {
+                    vline(state.bricks[i].brick_x + j,
+                          state.bricks[i].brick_y,
+                          BRICK_HEIGHT);
                 }
             }
         }
@@ -560,40 +615,63 @@ void update() {
         int text_ypad = 3;
 
         {
-            *DRAW_COLORS = 0x04;
             int count = count_alive_bricks(&state);
             if (count > 0) {
-                text("Game Over :(", text_x, text_y);
+                {
+                    *DRAW_COLORS = 0x04;
+                    text("Game Over :(", text_x, text_y);
+
+                    text_y += FONT_SIZE + text_ypad;
+                    text("You have destroyed", text_x, text_y);
+
+                    itoa(NUM_BRICKS - count, temp_buffer, 10);
+                    text_y += FONT_SIZE + text_ypad;
+                    text(temp_buffer, text_x, text_y);
+                    text("bricks",
+                         text_x + (FONT_SIZE * (1 + (int) strlen(temp_buffer))),
+                         text_y);
+                }
 
                 text_y += FONT_SIZE + text_ypad;
-                text("You have destroyed", text_x, text_y);
-
-                itoa(NUM_BRICKS - count, temp_buffer, 10);
                 text_y += FONT_SIZE + text_ypad;
-                text(temp_buffer, text_x, text_y);
-                text("bricks",
-                     text_x + (FONT_SIZE * (1 + (int) strlen(temp_buffer))),
-                     text_y);
+
+                {
+                    *DRAW_COLORS = 0x01;
+                    text("Press down arrow to", text_x, text_y);
+
+                    text_y += FONT_SIZE + text_ypad;
+                    text("retry!", text_x, text_y);
+                }
             } else {
-                text("Congratulations!", text_x, text_y);
+                {
+                    *DRAW_COLORS = 0x04;
+                    text("Congratulations!", text_x, text_y);
+
+                    text_y += FONT_SIZE + text_ypad;
+                    text("You have destroyed", text_x, text_y);
+
+                    text_y += FONT_SIZE + text_ypad;
+                    text("All the bricks!", text_x, text_y);
+                }
 
                 text_y += FONT_SIZE + text_ypad;
-                text("You have destroyed", text_x, text_y);
-
                 text_y += FONT_SIZE + text_ypad;
-                text("All the bricks!", text_x, text_y);
+
+                {
+                    *DRAW_COLORS = 0x01;
+                    text("Press down arrow to", text_x, text_y);
+
+                    if (state.level + 1 < NUM_LEVELS) {
+                        text_y += FONT_SIZE + text_ypad;
+                        text("next level!", text_x, text_y);
+                    } else {
+                        text_y += FONT_SIZE + text_ypad;
+                        text("restart from", text_x, text_y);
+                        text_y += FONT_SIZE + text_ypad;
+                        text("the beginning!", text_x, text_y);
+                    }
+                }
             }
-        }
-
-        text_y += FONT_SIZE + text_ypad;
-        text_y += FONT_SIZE + text_ypad;
-
-        {
-            *DRAW_COLORS = 0x01;
-            text("Press down arrow to", text_x, text_y);
-
-            text_y += FONT_SIZE + text_ypad;
-            text("restart the game!", text_x, text_y);
         }
 
         break;
