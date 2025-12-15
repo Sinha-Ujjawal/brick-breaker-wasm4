@@ -311,27 +311,27 @@ void reset_bricks(Game_State *state) {
             break;
         case LEVEL3:
             state->bricks[i].health = 3;
-            state->bricks[i].brick_fall_clock.clock_size = 240;
+            state->bricks[i].brick_fall_clock.clock_size = 300;
             break;
         case LEVEL4:
             state->bricks[i].health = 4;
-            state->bricks[i].brick_fall_clock.clock_size = 240;
+            state->bricks[i].brick_fall_clock.clock_size = 300;
             break;
         case LEVEL5:
             state->bricks[i].health = 5;
-            state->bricks[i].brick_fall_clock.clock_size = 300;
+            state->bricks[i].brick_fall_clock.clock_size = 360;
             break;
         case LEVEL6:
             state->bricks[i].health = 6;
-            state->bricks[i].brick_fall_clock.clock_size = 300;
+            state->bricks[i].brick_fall_clock.clock_size = 360;
             break;
         case LEVEL7:
             state->bricks[i].health = 7;
-            state->bricks[i].brick_fall_clock.clock_size = 360;
+            state->bricks[i].brick_fall_clock.clock_size = 420;
             break;
         case LEVEL8:
             state->bricks[i].health = 8;
-            state->bricks[i].brick_fall_clock.clock_size = 360;
+            state->bricks[i].brick_fall_clock.clock_size = 420;
             break;
         case NUM_LEVELS:
         default:
@@ -346,7 +346,26 @@ void reset_bricks(Game_State *state) {
 }
 
 void reset_level(Game_State *state) {
-    state->num_balls_left = 3;
+    switch(state->level) {
+    case LEVEL1:
+    case LEVEL2:
+        state->num_balls_left = 3;
+        break;
+    case LEVEL3:
+    case LEVEL4:
+    case LEVEL5:
+        state->num_balls_left = 4;
+        break;
+    case LEVEL6:
+    case LEVEL7:
+    case LEVEL8:
+        state->num_balls_left = 5;
+        break;
+    case NUM_LEVELS:
+    default:
+        panicf("Unreachable! Invalid level: %d", state->level);
+        break;
+    }
     state->paddle_x = MIN_PADDLE_X;
     reset_ball(state);
     reset_bricks(state);
@@ -372,7 +391,7 @@ void start() {
     // state.screen_kind = GAME_OVER_SCREEN;
     state.frame_clock.clock = 0;
     state.frame_clock.clock_size = 60;
-    state.current_palette = FROGGYOS;
+    state.current_palette = ICE_CREAM_GB;
     state.level = LEVEL1;
     reset_level(&state);
     set_palette(state.current_palette);
@@ -402,11 +421,11 @@ void update() {
     clear_background();
 
     // Switch Screen Logic
-    if (pressed_this_frame & BUTTON_UP) {
+    if (pressed_this_frame & BUTTON_DOWN) {
         state.screen_kind = HELP_SCREEN;
     }
     if (state.screen_kind == GAME_OVER_SCREEN) {
-        if (pressed_this_frame & BUTTON_DOWN) {
+        if (pressed_this_frame & BUTTON_UP) {
             if (!any_brick_alive(&state)) {
                 state.level = (state.level + 1) % NUM_LEVELS;
             }
@@ -415,7 +434,7 @@ void update() {
             return;
         }
     } else {
-        if (pressed_this_frame & BUTTON_DOWN) {
+        if (pressed_this_frame & BUTTON_UP) {
             state.screen_kind = GAME_SCREEN;
         }
     }
@@ -453,7 +472,7 @@ void update() {
 
         {
             *DRAW_COLORS = 0x01;
-            text("Press down arrow to", text_x, text_y);
+            text("Press up arrow to", text_x, text_y);
 
             text_y += FONT_SIZE + text_ypad;
             text("start the game!", text_x, text_y);
@@ -464,7 +483,7 @@ void update() {
 
         {
             *DRAW_COLORS = 0x03;
-            text("Press up arrow", text_x, text_y);
+            text("Press down arrow", text_x, text_y);
 
             text_y += FONT_SIZE + text_ypad;
             text("in game to open", text_x, text_y);
@@ -689,7 +708,7 @@ void update() {
 
                 {
                     *DRAW_COLORS = 0x01;
-                    text("Press down arrow to", text_x, text_y);
+                    text("Press up arrow to", text_x, text_y);
 
                     text_y += FONT_SIZE + text_ypad;
                     text("retry!", text_x, text_y);
@@ -711,7 +730,7 @@ void update() {
 
                 {
                     *DRAW_COLORS = 0x01;
-                    text("Press down arrow to", text_x, text_y);
+                    text("Press up arrow to", text_x, text_y);
 
                     if (state.level + 1 < NUM_LEVELS) {
                         text_y += FONT_SIZE + text_ypad;
